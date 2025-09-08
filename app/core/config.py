@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     
     # CORS
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001"]
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000", 
+        "http://localhost:3001",
+        "https://text-extraction-frontend.vercel.app"
+    ]
     ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
     
     # Database
