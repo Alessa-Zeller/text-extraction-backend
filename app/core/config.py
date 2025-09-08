@@ -18,9 +18,15 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000", 
         "http://localhost:3001",
-        "https://text-extraction-frontend.vercel.app"
+        "https://text-extraction-frontend.vercel.app",
+        "https://text-extraction-backend-production.up.railway.app"
     ]
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
+    ALLOWED_HOSTS: List[str] = [
+        "localhost", 
+        "127.0.0.1",
+        "text-extraction-backend-production.up.railway.app",
+        "*.railway.app"
+    ]
     
     # Database
     DATABASE_URL: str = "postgresql://postgres:ZcTFzqMwcuuGpPITtIMZXPqDCjLAjLts@crossover.proxy.rlwy.net:53116/railway"
