@@ -11,6 +11,8 @@ from app.schemas.order_schemas import (
 )
 from app.schemas.pdf_schemas import APIResponseSchema
 from app.services.order_service import order_service
+from app.services.activity_service import activity_service
+from app.schemas.activity_schemas import ActivityTypeEnum
 
 router = APIRouter()
 
@@ -22,6 +24,24 @@ async def create_order(
     """Create a new order."""
     try:
         order = order_service.create_order(order_data, current_user["user_id"])
+        
+        # Log order creation activity
+        try:
+            activity_service.log_user_activity(
+                user_id=current_user["user_id"],
+                activity_type=ActivityTypeEnum.ORDER_CREATE,
+                description=f"Created order for patient: {order_data.patient_first_name} {order_data.patient_last_name}",
+                details={
+                    "order_id": order.id,
+                    "patient_name": f"{order_data.patient_first_name} {order_data.patient_last_name}",
+                    "patient_dob": order_data.patient_date_of_birth,
+                    "order_status": order_data.order_status,
+                    "notes": order_data.notes
+                }
+            )
+        except Exception as e:
+            # Don't fail order creation if activity logging fails
+            pass
         
         return APIResponseSchema(
             success=True,
@@ -108,6 +128,14 @@ async def update_order(
 ):
     """Update an existing order."""
     try:
+        # Get the original order for comparison
+        original_order = order_service.get_order(order_id)
+        if not original_order:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+        
         order = order_service.update_order(order_id, order_data, current_user["user_id"])
         
         if not order:
@@ -115,6 +143,34 @@ async def update_order(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
+        
+        # Log order update activity
+        try:
+            # Determine what fields were changed
+            changes = {}
+            update_data = order_data.dict(exclude_unset=True)
+            for field, new_value in update_data.items():
+                original_value = getattr(original_order, field, None)
+                if original_value != new_value:
+                    changes[field] = {
+                        "old_value": original_value,
+                        "new_value": new_value
+                    }
+            
+            activity_service.log_user_activity(
+                user_id=current_user["user_id"],
+                activity_type=ActivityTypeEnum.ORDER_UPDATE,
+                description=f"Updated order #{order_id} for patient: {order.patient_first_name} {order.patient_last_name}",
+                details={
+                    "order_id": order_id,
+                    "patient_name": f"{order.patient_first_name} {order.patient_last_name}",
+                    "changes": changes,
+                    "updated_fields": list(update_data.keys())
+                }
+            )
+        except Exception as e:
+            # Don't fail order update if activity logging fails
+            pass
         
         return APIResponseSchema(
             success=True,
@@ -137,6 +193,14 @@ async def delete_order(
 ):
     """Delete an order."""
     try:
+        # Get the order details before deletion for logging
+        order_to_delete = order_service.get_order(order_id)
+        if not order_to_delete:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Order not found"
+            )
+        
         success = order_service.delete_order(order_id)
         
         if not success:
@@ -144,6 +208,26 @@ async def delete_order(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Order not found"
             )
+        
+        # Log order deletion activity
+        try:
+            activity_service.log_user_activity(
+                user_id=current_user["user_id"],
+                activity_type=ActivityTypeEnum.ORDER_DELETE,
+                description=f"Deleted order #{order_id} for patient: {order_to_delete.patient_first_name} {order_to_delete.patient_last_name}",
+                details={
+                    "order_id": order_id,
+                    "patient_name": f"{order_to_delete.patient_first_name} {order_to_delete.patient_last_name}",
+                    "patient_dob": order_to_delete.patient_date_of_birth,
+                    "order_status": order_to_delete.order_status,
+                    "notes": order_to_delete.notes,
+                    "created_at": order_to_delete.created_at.isoformat(),
+                    "updated_at": order_to_delete.updated_at.isoformat()
+                }
+            )
+        except Exception as e:
+            # Don't fail order deletion if activity logging fails
+            pass
         
         return APIResponseSchema(
             success=True,
