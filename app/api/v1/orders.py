@@ -159,45 +159,5 @@ async def delete_order(
             detail=f"Failed to delete order: {str(e)}"
         )
 
-@router.get("/stats/overview", response_model=APIResponseSchema)
-async def get_order_stats(
-    current_user: dict = Depends(get_current_user)
-):
-    """Get order statistics overview."""
-    try:
-        stats = order_service.get_order_stats()
-        
-        return APIResponseSchema(
-            success=True,
-            message="Order statistics retrieved successfully",
-            data=stats
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve order statistics: {str(e)}"
-        )
 
-@router.get("/status/{status}", response_model=APIResponseSchema)
-async def get_orders_by_status(
-    status: str,
-    skip: int = Query(0, ge=0, description="Number of orders to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Number of orders to return"),
-    current_user: dict = Depends(get_current_user)
-):
-    """Get orders filtered by status."""
-    try:
-        orders = order_service.get_orders(skip=skip, limit=limit, status=status)
-        
-        return APIResponseSchema(
-            success=True,
-            message=f"Retrieved {len(orders)} orders with status '{status}'",
-            data=orders
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve orders by status: {str(e)}"
-        )
+

@@ -8,7 +8,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 from datetime import datetime
 import re
-from llama_parse import LlamaParse
+"""
+LlamaParse is an optional dependency used only when OCR/cloud parsing is enabled.
+We avoid importing it at module import time to prevent startup failures if the
+library (or its transitive deps like llama_index) is not installed.
+"""
 
 from app.core.config import settings
 from app.core.exceptions import PDFProcessingError, BatchProcessingError, FileValidationError
@@ -49,7 +53,7 @@ class PDFProcessor:
             result = self._try_standard_extraction(file_path)
             
             # If no text was extracted (image-based PDF), use LlamaParse
-            if result["total_text_length"] == 0 and settings.USE_LLAMAPARSE:
+            if result["total_text_length"] == 0:
                 logger.info(f"No text found in {file_path.name}, attempting LlamaParse extraction")
                 result = self._extract_text_with_llamaparse(file_path)
             
@@ -105,11 +109,12 @@ class PDFProcessor:
                         "height": page.height
                     }
                     
-                    # Extract clinical data from page 2 if text is available
-                    if page_num == 2 and text.strip():
+                    # Extract clinical data from any page with text
+                    if text.strip() and not result.get("clinical_data"):
                         clinical_data = self._extract_clinical_data(text)
-                        result["clinical_data"] = clinical_data
-                        page_info["clinical_data"] = clinical_data
+                        if clinical_data.get("patient_name", {}).get("full_name") or clinical_data.get("date_of_birth"):
+                            result["clinical_data"] = clinical_data
+                            page_info["clinical_data"] = clinical_data
                     
                     result["pages"].append(page_info)
                     result["total_text_length"] += len(text)
@@ -145,7 +150,9 @@ class PDFProcessor:
                     "LlamaParse API key is not configured. Set LLAMAPARSE_API_KEY in environment.",
                     details=f"File: {file_path.name}"
                 )
-            
+            # Lazy import to avoid import errors at app startup when optional deps are missing
+            from llama_parse import LlamaParse
+
             parser = LlamaParse(
                 api_key=settings.LLAMAPARSE_API_KEY,
                 result_type=settings.LLAMAPARSE_RESULT_TYPE or "text",
@@ -178,12 +185,20 @@ class PDFProcessor:
                 "clinical_data": {}
             }
 
-            # Try extracting clinical data from page 2 (if exists)
+            # Try extracting clinical data from all pages (prioritize page 2, then page 1)
+            clinical_data = {}
             if len(pages) >= 2:
+                # Try page 2 first (index 1)
                 text_p2 = pages[1].get("text", "")
                 clinical_data = self._extract_clinical_data(text_p2)
-                result["clinical_data"] = clinical_data
                 pages[1]["clinical_data"] = clinical_data
+            elif len(pages) >= 1:
+                # If only 1 page, use page 1 (index 0)
+                text_p1 = pages[0].get("text", "")
+                clinical_data = self._extract_clinical_data(text_p1)
+                pages[0]["clinical_data"] = clinical_data
+            
+            result["clinical_data"] = clinical_data
 
             # Generate file hash for deduplication
             result["file_hash"] = self._generate_file_hash(file_path)
@@ -281,9 +296,20 @@ class PDFProcessor:
             result = self._try_standard_extraction(file_path)
             
             # If no text was extracted (image-based PDF), use LlamaParse
-            if result["total_text_length"] == 0 and settings.USE_LLAMAPARSE:
+            if result["total_text_length"] == 0:
                 logger.info(f"No text found in {file_path.name}, attempting LlamaParse extraction")
-                result = self._extract_text_with_llamaparse(file_path)
+                try:
+                    result = self._extract_text_with_llamaparse(file_path)
+                except ImportError as e:
+                    logger.warning(f"LlamaParse not available: {str(e)}")
+                    result["status"] = "partial_success"
+                    result["message"] = "Image-based PDF detected. OCR service not available. Please install llama-parse for full text extraction."
+                    result["metadata"]["extraction_method"] = "standard_no_ocr"
+                except Exception as e:
+                    logger.warning(f"LlamaParse extraction failed: {str(e)}")
+                    result["status"] = "partial_success"
+                    result["message"] = f"Image-based PDF detected. OCR extraction failed: {str(e)}"
+                    result["metadata"]["extraction_method"] = "standard_ocr_failed"
             
             # Create lightweight response with only essential data
             clinical_response = {
@@ -294,7 +320,9 @@ class PDFProcessor:
                 "extraction_method": result["metadata"].get("extraction_method", "unknown"),
                 "clinical_data": result.get("clinical_data", {}),
                 "file_hash": result["file_hash"],
-                "status": result["status"]
+                "status": result["status"],
+                # Temporarily include extracted text for debugging (all pages combined)
+                "debug_extracted_text": " ".join([page.get("text", "") for page in result.get("pages", [])])[:1000]
             }
             
             return clinical_response

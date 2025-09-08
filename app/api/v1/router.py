@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import auth, pdf, orders
+from app.api.v1 import auth, pdf, orders,activity
 
 api_router = APIRouter()
 
@@ -23,4 +23,10 @@ api_router.include_router(
     orders.router,
     prefix="/orders",
     tags=["Order Management"]
+)
+# Include order management routes
+api_router.include_router(
+    activity.router,
+    prefix="/activity",
+    tags=["Activity Management"]
 )

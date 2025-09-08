@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # Security
-    SECRET_KEY: str = secrets.token_urlsafe(32)
+    SECRET_KEY: str = "2eaKXj8k8XrkKCkNeJundkb5h2ZjVcaOmVER5wWxAoc"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
     
     # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost/pdf_processing"
+    DATABASE_URL: str = "postgresql://postgres:ZcTFzqMwcuuGpPITtIMZXPqDCjLAjLts@crossover.proxy.rlwy.net:53116/railway"
     
     # Redis (for caching and task queue)
     REDIS_URL: str = "redis://localhost:6379"

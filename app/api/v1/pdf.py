@@ -11,14 +11,11 @@ from app.core.security import get_current_user
 from app.core.config import settings
 from app.services.pdf_service import pdf_processor
 from app.schemas.pdf_schemas import (
-    PDFProcessingResultSchema,
-    BatchProcessingResultSchema,
-    TextSearchResultSchema,
-    TextSearchRequestSchema,
-    PDFSummarySchema,
     APIResponseSchema
 )
 from app.core.exceptions import PDFProcessingError, BatchProcessingError, FileValidationError
+from app.services.activity_service import activity_service
+from app.schemas.activity_schemas import ActivityTypeEnum
 
 router = APIRouter()
 
@@ -49,6 +46,23 @@ async def upload_and_process_pdf(
         
         # Add user context to result
         result["processed_by"] = current_user["user_id"]
+        
+        # Log PDF upload activity
+        try:
+            activity_service.log_user_activity(
+                user_id=current_user["user_id"],
+                activity_type=ActivityTypeEnum.PDF_UPLOAD,
+                description=f"Uploaded PDF: {file.filename}",
+                details={
+                    "filename": file.filename,
+                    "file_size": result.get("file_size", 0),
+                    "total_pages": result.get("total_pages", 0),
+                    "extraction_method": result.get("extraction_method", "unknown")
+                }
+            )
+        except Exception as e:
+            # Don't fail upload if activity logging fails
+            pass
         
         return APIResponseSchema(
             success=True,
@@ -115,6 +129,24 @@ async def batch_upload_and_process_pdfs(
         # Add user context to result
         result["processed_by"] = current_user["user_id"]
         
+        # Log batch PDF upload activity
+        try:
+            activity_service.log_user_activity(
+                user_id=current_user["user_id"],
+                activity_type=ActivityTypeEnum.PDF_BATCH_UPLOAD,
+                description=f"Batch uploaded {len(files)} PDF files",
+                details={
+                    "file_count": len(files),
+                    "filenames": [file.filename for file in files],
+                    "success_count": result['summary']['success_count'],
+                    "error_count": result['summary']['error_count'],
+                    "clinical_data_extracted": result['summary']['clinical_data_extracted']
+                }
+            )
+        except Exception as e:
+            # Don't fail upload if activity logging fails
+            pass
+        
         return APIResponseSchema(
             success=True,
             message=f"Batch processing completed. {result['summary']['success_count']} files processed successfully, {result['summary']['error_count']} failed. Clinical data extracted from {result['summary']['clinical_data_extracted']} files.",
@@ -137,12 +169,7 @@ async def batch_upload_and_process_pdfs(
             if os.path.exists(temp_file_name):
                 os.unlink(temp_file_name)
 
-@router.post("/search", response_model=APIResponseSchema)
-async def search_text_in_pdf_results(
-    search_request: TextSearchRequestSchema,
-    pdf_results: PDFProcessingResultSchema,
-    current_user: dict = Depends(get_current_user)
-):
+
     """Search for text within PDF processing results."""
     
     try:
@@ -167,52 +194,8 @@ async def search_text_in_pdf_results(
             detail=f"Search error: {str(e)}"
         )
 
-@router.post("/summary", response_model=APIResponseSchema)
-async def get_pdf_summary(
-    pdf_results: PDFProcessingResultSchema,
-    current_user: dict = Depends(get_current_user)
-):
-    """Generate a summary of PDF processing results."""
-    
-    try:
-        # Convert Pydantic model to dict for processing
-        results_dict = pdf_results.dict()
-        
-        # Generate summary
-        summary = pdf_processor.get_pdf_summary(results_dict)
-        
-        return APIResponseSchema(
-            success=True,
-            message="Summary generated successfully",
-            data=summary
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Summary generation error: {str(e)}"
-        )
 
-@router.get("/health", response_model=APIResponseSchema)
-async def pdf_service_health():
-    """Check PDF service health."""
-    return APIResponseSchema(
-        success=True,
-        message="PDF service is healthy",
-        data={
-            "service": "pdf_processor",
-            "status": "healthy",
-            "max_batch_size": settings.BATCH_SIZE,
-            "max_file_size": settings.MAX_FILE_SIZE,
-            "allowed_file_types": settings.ALLOWED_FILE_TYPES
-        }
-    )
 
-# Admin-only endpoints
-@router.get("/stats", response_model=APIResponseSchema)
-async def get_processing_stats(
-    current_user: dict = Depends(get_current_user)
-):
     """Get PDF processing statistics (admin only)."""
     
     # Check admin privileges
