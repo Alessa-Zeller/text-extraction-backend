@@ -18,15 +18,14 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = [
         "http://localhost:3000", 
         "http://localhost:3001",
-        "https://text-extraction-backend-production.up.railway.app",
-        "https://text-extraction-frontend-ld9f71byo-alessa-devs-projects.vercel.app/"
+        "https://text-extraction-frontend.vercel.app",
+        "https://text-extraction-frontend-ld9f71byo-alessa-devs-projects.vercel.app"
     ]
     ALLOWED_HOSTS: List[str] = [
         "localhost", 
         "127.0.0.1",
         "text-extraction-backend-production.up.railway.app",
-        "*.railway.app",
-        "text-extraction-frontend-ld9f71byo-alessa-devs-projects.vercel.app"
+        "*.railway.app"
     ]
     
     # Database
